@@ -2,3 +2,5 @@ gcp/
 .terraform.lock.hcl
 .terraform/
 terraform.tfstate
+variables.tf
+terraform.tfstate.backup
