@@ -1,64 +1,3 @@
-# Network
-resource "google_compute_network" "vpc_network" {
-  name = "terraform-network"
-}
-
-resource "google_compute_subnetwork" "default" {
-  name          = "my-custom-subnet"
-  ip_cidr_range = "10.0.1.0/24"
-  region        = var.region
-  network       = google_compute_network.vpc_network.id
-}
-
-# Firewall Rules
-resource "google_compute_firewall" "allow_ssh" {
-  name    = "allow-ssh"
-  network = google_compute_network.vpc_network.self_link
-
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-
-  source_ranges = ["0.0.0.0/0"]
-}
-
-resource "google_compute_firewall" "allow-http" {
-  name    = "allow-http"
-  network = google_compute_network.vpc_network.self_link
-
-  allow {
-    protocol = "tcp"
-    ports    = ["80"]
-  }
-
-  source_ranges = ["0.0.0.0/0"]
-  target_tags = [ "allow-http" ]
-}
-
-resource "google_compute_firewall" "internal" {
-  name          = "internal-communication"
-  network       = google_compute_network.vpc_network.self_link
-  direction     = "INGRESS"
-  source_ranges = [google_compute_subnetwork.default.ip_cidr_range]
-  target_tags   = ["internal"]
-
-  allow {
-    protocol = "icmp"
-  }
-
-  allow {
-    protocol = "tcp"
-    ports    = ["0-65535"]
-  }
-
-  allow {
-    protocol = "udp"
-    ports    = ["0-65535"]
-  }
-}
-
-
 # Instance template
 resource "google_compute_instance_template" "default" {
   name         = "apache-mig-template"
@@ -84,12 +23,14 @@ resource "google_compute_instance_template" "default" {
   # }
 }
 
+
+
 # MIG
 resource "google_compute_instance_group_manager" "default" {
   name     = "apache-server-mig"
   zone     = var.zone
   named_port {
-    name = "http"
+    name = "my-port"
     port = 80
   }
   version {
@@ -97,7 +38,7 @@ resource "google_compute_instance_group_manager" "default" {
     name              = "primary"
   }
   base_instance_name = "apache-server-vm"
-  target_size        = 3
+  target_size        = 2
 }
 
 # DB instance
@@ -124,8 +65,6 @@ mysql -u root -e "CREATE USER 'myuser'@'localhost' IDENTIFIED BY 'mypassword'"
 mysql -u root -e "GRANT ALL PRIVILEGES ON mydb.* TO 'myuser'@'localhost'"
 EOF
 
-
-
   network_interface {
     subnetwork = google_compute_subnetwork.default.id
 
@@ -134,39 +73,3 @@ EOF
     }
   }
 }
-
-
-# Webserver instance 
-# resource "google_compute_instance" "default" {
-#   name         = "apache-server-vm"
-#   machine_type = var.machine_type
-#   zone         = var.zone
-#   tags         = ["internal","allow-http"]
-#   allow_stopping_for_update = "${var.allow_stopping_for_update}"
-
-#   boot_disk {
-#     initialize_params {
-#       image = "debian-cloud/debian-11"
-#     }
-#   }
-
-#   metadata_startup_script = "${file("bootstrap-vm.sh")}"
-
-#   network_interface {
-#     subnetwork = google_compute_subnetwork.default.id
-
-#     access_config {
-#       # Ephemeral IP
-#     }
-#   }
-# }
-
-// A variable for extracting the external IP address of the VM
-# output "Web-server-URL" {
-#   value = join("", ["http://", google_compute_instance.default.network_interface.0.access_config.0.nat_ip, ":80"])
-# }
-
-
-
-
-
