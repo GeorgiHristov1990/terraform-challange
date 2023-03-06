@@ -1,7 +1,16 @@
+# Network
 resource "google_compute_network" "vpc_network" {
   name = "terraform-network"
 }
 
+resource "google_compute_subnetwork" "default" {
+  name          = "my-custom-subnet"
+  ip_cidr_range = "10.0.1.0/24"
+  region        = var.region
+  network       = google_compute_network.vpc_network.id
+}
+
+# Firewall Rules
 resource "google_compute_firewall" "allow_ssh" {
   name    = "allow-ssh"
   network = google_compute_network.vpc_network.self_link
@@ -24,6 +33,7 @@ resource "google_compute_firewall" "allow-http" {
   }
 
   source_ranges = ["0.0.0.0/0"]
+  target_tags = [ "allow-http" ]
 }
 
 resource "google_compute_firewall" "internal" {
@@ -49,44 +59,48 @@ resource "google_compute_firewall" "internal" {
 }
 
 
-resource "google_compute_subnetwork" "default" {
-  name          = "my-custom-subnet"
-  ip_cidr_range = "10.0.1.0/24"
-  region        = var.region
-  network       = google_compute_network.vpc_network.id
-}
-
-
-resource "google_compute_instance" "default" {
-  name         = "apache-server-vm"
+# Instance template
+resource "google_compute_instance_template" "default" {
+  name         = "apache-mig-template"
   machine_type = var.machine_type
-  zone         = var.zone
-  tags         = ["internal"]
-  allow_stopping_for_update = "${var.allow_stopping_for_update}"
-
-  boot_disk {
-    initialize_params {
-      image = "debian-cloud/debian-11"
-    }
-  }
-
-  metadata_startup_script = <<EOF
-#!/bin/bash
-sudo apt-get update
-sudo apt-get install -y apache2
-sudo systemctl start apache2
-sudo echo "<h1>This is my webserver</h1>" > /var/www/html/index.html
-EOF
+  tags         = ["allow-health-check", "internal", "allow-http"]
 
   network_interface {
+    network    = google_compute_network.vpc_network.id
     subnetwork = google_compute_subnetwork.default.id
-
     access_config {
-      # Ephemeral IP
+      # add external ip to fetch packages
     }
   }
+  disk {
+    source_image = "debian-cloud/debian-11"
+    auto_delete  = true
+    boot         = true
+  }
+
+  metadata_startup_script = "${file("bootstrap-vm.sh")}"
+  # lifecycle {
+  #   create_before_destroy = true
+  # }
 }
 
+# MIG
+resource "google_compute_instance_group_manager" "default" {
+  name     = "apache-server-mig"
+  zone     = var.zone
+  named_port {
+    name = "http"
+    port = 80
+  }
+  version {
+    instance_template = google_compute_instance_template.default.id
+    name              = "primary"
+  }
+  base_instance_name = "apache-server-vm"
+  target_size        = 3
+}
+
+# DB instance
 resource "google_compute_instance" "db" {
   name         = "db-server-vm"
   machine_type = var.machine_type
@@ -122,7 +136,37 @@ EOF
 }
 
 
+# Webserver instance 
+# resource "google_compute_instance" "default" {
+#   name         = "apache-server-vm"
+#   machine_type = var.machine_type
+#   zone         = var.zone
+#   tags         = ["internal","allow-http"]
+#   allow_stopping_for_update = "${var.allow_stopping_for_update}"
+
+#   boot_disk {
+#     initialize_params {
+#       image = "debian-cloud/debian-11"
+#     }
+#   }
+
+#   metadata_startup_script = "${file("bootstrap-vm.sh")}"
+
+#   network_interface {
+#     subnetwork = google_compute_subnetwork.default.id
+
+#     access_config {
+#       # Ephemeral IP
+#     }
+#   }
+# }
+
 // A variable for extracting the external IP address of the VM
-output "Web-server-URL" {
-  value = join("", ["http://", google_compute_instance.default.network_interface.0.access_config.0.nat_ip, ":80"])
-}
+# output "Web-server-URL" {
+#   value = join("", ["http://", google_compute_instance.default.network_interface.0.access_config.0.nat_ip, ":80"])
+# }
+
+
+
+
+
