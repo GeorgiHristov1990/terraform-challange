@@ -55,16 +55,7 @@ resource "google_compute_instance" "db" {
     }
   }
 
-# to move to a descrite script file
-  metadata_startup_script = <<EOF
-!/bin/bash
-sudo yum install -y mariadb-server
-sudo systemctl enable mariadb
-sudo systemctl start mariadb
-mysql -u root -e "CREATE DATABASE mydb"
-mysql -u root -e "CREATE USER 'myuser'@'localhost' IDENTIFIED BY 'mypassword'"
-mysql -u root -e "GRANT ALL PRIVILEGES ON mydb.* TO 'myuser'@'localhost'"
-EOF
+  metadata_startup_script = file("setup-db.sh")
 
   network_interface {
     subnetwork = google_compute_subnetwork.default.id
