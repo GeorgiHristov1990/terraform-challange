@@ -29,3 +29,6 @@
 # }
 
 
+output "address" {
+  value = join("", ["http://", "${google_compute_global_address.default.address}", ":80"])
+}

@@ -17,18 +17,18 @@ resource "google_compute_instance_template" "default" {
     boot         = true
   }
 
-  metadata_startup_script = "${file("bootstrap-vm.sh")}"
+  metadata_startup_script = file("bootstrap-vm.sh")
   # lifecycle {
   #   create_before_destroy = true
   # }
 }
 
-
-
-# MIG
+# MIG for webserver
 resource "google_compute_instance_group_manager" "default" {
-  name     = "apache-server-mig"
-  zone     = var.zone
+  name               = "apache-server-mig"
+  base_instance_name = "apache-server-vm"
+  target_size        = 2
+  zone               = var.zone
   named_port {
     name = "my-port"
     port = 80
@@ -37,17 +37,31 @@ resource "google_compute_instance_group_manager" "default" {
     instance_template = google_compute_instance_template.default.id
     name              = "primary"
   }
-  base_instance_name = "apache-server-vm"
-  target_size        = 2
+}
+
+# MIG failover webserver
+resource "google_compute_instance_group_manager" "secondary_failover_group" {
+  name               = "failover-group"
+  base_instance_name = "apache-server-vm-failover"
+  zone               = var.failover_zone
+  target_size        = 1
+   named_port {
+    name = "my-port"
+    port = 80
+  }
+  version {
+    instance_template = google_compute_instance_template.default.id
+    name              = "secondary-failover"
+  }
 }
 
 # DB instance
 resource "google_compute_instance" "db" {
-  name         = "db-server-vm"
-  machine_type = var.machine_type
-  zone         = var.zone
-  tags         = ["internal"]
-  allow_stopping_for_update = "${var.allow_stopping_for_update}"
+  name                      = "db-server-vm"
+  machine_type              = var.machine_type
+  zone                      = var.zone
+  tags                      = ["internal"]
+  allow_stopping_for_update = var.allow_stopping_for_update
 
   boot_disk {
     initialize_params {

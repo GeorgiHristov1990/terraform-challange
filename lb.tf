@@ -1,27 +1,30 @@
 # backend
 resource "google_compute_backend_service" "default" {
-  name                    = "backend-service"
-  protocol                = "HTTP"
-  port_name               = "my-port"
-  load_balancing_scheme   = "EXTERNAL"
-  timeout_sec             = 10
-  health_checks           = [google_compute_health_check.default.id]
+  name                  = "backend-service"
+  protocol              = "HTTP"
+  port_name             = "my-port"
+  load_balancing_scheme = "EXTERNAL"
+  timeout_sec           = 10
+  health_checks = [google_compute_health_check.default.id]
   backend {
     group           = google_compute_instance_group_manager.default.instance_group
     balancing_mode  = "UTILIZATION"
     capacity_scaler = 1.0
   }
+  backend {
+    group = google_compute_instance_group_manager.secondary_failover_group.instance_group
+  }
 }
 
 # reserved IP address
 resource "google_compute_global_address" "default" {
-  name     = "lb-static-ip"
+  name = "lb-static-ip"
 }
 
 # http proxy
 resource "google_compute_target_http_proxy" "default" {
-  name     = "lb-target-http-proxy"
-  url_map  = google_compute_url_map.default.id
+  name    = "lb-target-http-proxy"
+  url_map = google_compute_url_map.default.id
 }
 
 
@@ -44,7 +47,13 @@ resource "google_compute_url_map" "default" {
 
 # health check
 resource "google_compute_health_check" "default" {
-  name     = "apache-server-hc"
+  name = "apache-server-hc"
+
+  check_interval_sec  = 6
+  timeout_sec         = 5
+  unhealthy_threshold = 2
+  healthy_threshold   = 2
+
   http_health_check {
     port_specification = "USE_SERVING_PORT"
   }
