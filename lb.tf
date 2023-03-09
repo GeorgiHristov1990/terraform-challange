@@ -11,9 +11,12 @@ resource "google_compute_backend_service" "default" {
     balancing_mode  = "UTILIZATION"
     capacity_scaler = 1.0
   }
-  backend {
-    group = google_compute_instance_group_manager.secondary_failover_group.instance_group
-  }
+#   backend {
+#     group = google_compute_instance_group_manager.secondary_failover_group.instance_group
+#   }
+  depends_on = [
+    google_compute_instance_template.default
+  ]
 }
 
 # reserved IP address
@@ -43,18 +46,4 @@ resource "google_compute_global_forwarding_rule" "default" {
 resource "google_compute_url_map" "default" {
   name            = "lb-url-map"
   default_service = google_compute_backend_service.default.id
-}
-
-# health check
-resource "google_compute_health_check" "default" {
-  name = "apache-server-hc"
-
-  check_interval_sec  = 6
-  timeout_sec         = 5
-  unhealthy_threshold = 2
-  healthy_threshold   = 2
-
-  http_health_check {
-    port_specification = "USE_SERVING_PORT"
-  }
 }

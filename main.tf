@@ -16,11 +16,11 @@ resource "google_compute_instance_template" "default" {
     auto_delete  = true
     boot         = true
   }
+  metadata = {
+    "google-logging-enabled" = "true"
+  }
 
-  metadata_startup_script = file("bootstrap-vm.sh")
-  # lifecycle {
-  #   create_before_destroy = true
-  # }
+  metadata_startup_script = file("scripts/bootstrap-vm.sh")
 }
 
 # MIG for webserver
@@ -29,6 +29,7 @@ resource "google_compute_instance_group_manager" "default" {
   base_instance_name = "apache-server-vm"
   target_size        = 2
   zone               = var.zone
+
   named_port {
     name = "my-port"
     port = 80
@@ -37,21 +38,24 @@ resource "google_compute_instance_group_manager" "default" {
     instance_template = google_compute_instance_template.default.id
     name              = "primary"
   }
+  auto_healing_policies {
+    health_check = google_compute_health_check.default.id
+    initial_delay_sec = 120
+  }
 }
 
-# MIG failover webserver
-resource "google_compute_instance_group_manager" "secondary_failover_group" {
-  name               = "failover-group"
-  base_instance_name = "apache-server-vm-failover"
-  zone               = var.failover_zone
-  target_size        = 1
-   named_port {
-    name = "my-port"
+# health check
+resource "google_compute_health_check" "default" {
+  name = "apache-server-hc"
+
+  check_interval_sec  = 10
+  timeout_sec         = 5
+  unhealthy_threshold = 3
+  healthy_threshold   = 2
+
+  http_health_check {
+    # port_specification = "USE_SERVING_PORT"
     port = 80
-  }
-  version {
-    instance_template = google_compute_instance_template.default.id
-    name              = "secondary-failover"
   }
 }
 
@@ -69,7 +73,7 @@ resource "google_compute_instance" "db" {
     }
   }
 
-  metadata_startup_script = file("setup-db.sh")
+  metadata_startup_script = file("scripts/setup-db.sh")
 
   network_interface {
     subnetwork = google_compute_subnetwork.default.id
